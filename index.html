@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="hi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sharad Insta Pro - Instagram Reels Downloader</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>Sharad Insta Pro 🎬</h1>
+      <p class="notice">
+        ⚠ Reel fetch होने के बाद <b>1 मिनट के अंदर डाउनलोड</b> कर लें,
+        वरना लिंक expire हो जाएगी।
+      </p>
+
+      <input
+        type="text"
+        id="instaLink"
+        placeholder="यहाँ Instagram Reel लिंक पेस्ट करें..."
+      />
+      <div class="buttons">
+        <button id="pasteBtn">📋 Paste</button>
+        <button id="downloadBtn">⬇ Fetch Reel</button>
+      </div>
+
+      <div id="downloadArea" style="margin-top: 20px"></div>
+    </div>
+
+    <script>
+      document.getElementById("pasteBtn").addEventListener("click", async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          document.getElementById("instaLink").value = text;
+        } catch {
+          alert("Clipboard access denied. Paste manually.");
+        }
+      });
+
+      document
+        .getElementById("downloadBtn")
+        .addEventListener("click", async () => {
+          const link = document.getElementById("instaLink").value.trim();
+          const area = document.getElementById("downloadArea");
+
+          if (!link) {
+            alert("कृपया एक वैध Instagram लिंक पेस्ट करें।");
+            return;
+          }
+
+          area.innerHTML = "<p>⏳ Fetching reel, please wait...</p>";
+
+          const res = await fetch("/api/download", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reelUrl: link }),
+          });
+
+          const data = await res.json();
+
+          if (data.success) {
+            const fileUrl = data.fileUrl;
+            area.innerHTML = `
+              <p>✅ Reel ready (1 minute valid)</p>
+              <video width="100%" controls style="border-radius:8px;margin-top:8px;">
+                <source src="${fileUrl}" type="video/mp4">
+                Your browser does not support the video tag.
+              </video>
+              <br />
+              <a href="${fileUrl}" download class="downloadBtn">💾 Save to Device</a>
+            `;
+          } else {
+            area.innerHTML = "<p style='color:red;'>❌ Download failed.</p>";
+          }
+        });
+    </script>
+  </body>
+</html>
