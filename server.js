@@ -4,7 +4,7 @@ import bodyParser from "body-parser";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { exec } from "child_process";
+import fetch from "node-fetch";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,55 +16,59 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// ==============================
-// 📥 Download Reel API
-// ==============================
-app.post("/api/download", async (req, res) => {
-  const { reelUrl } = req.body;
-  console.log("📩 Request received:", reelUrl);
-
-  if (!reelUrl || !reelUrl.includes("instagram.com")) {
-    return res.status(400).json({ success: false, message: "Invalid link" });
-  }
-
-  const timestamp = Date.now();
-  const filePath = path.join(__dirname, `reel-${timestamp}.mp4`);
-  const command = `yt-dlp -f best -o "${filePath}" "${reelUrl}"`;
-
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      console.error("❌ yt-dlp error:", stderr);
-      return res.status(500).json({ success: false, message: "Download failed" });
-    }
-
-    console.log("✅ Download complete:", filePath);
-    res.json({ success: true, fileUrl: `/download/${path.basename(filePath)}` });
-
-    // 🕐 Auto-delete after 1 minute
-    setTimeout(() => {
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log("🗑 File deleted after 1 minute:", path.basename(filePath));
-        }
-      } catch (e) {
-        console.warn("⚠ Cleanup failed:", e.message);
-      }
-    }, 60 * 1000);
-  });
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ==============================
-// ⬇ Serve file for download
-// ==============================
+// ----------------------
+// 📥 Download Reel API
+// ----------------------
+app.post("/api/download", async (req, res) => {
+  const { reelUrl } = req.body;
+
+  try {
+    if (!reelUrl || !reelUrl.includes("instagram.com")) {
+      return res.status(400).json({ success: false, message: "Invalid link" });
+    }
+
+    // Instagram oEmbed API (public)
+    const apiUrl = `https://www.instagram.com/oembed/?url=${encodeURIComponent(reelUrl)}`;
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+
+    if (!data.thumbnail_url) {
+      throw new Error("Failed to fetch reel info");
+    }
+
+    // Thumbnail को download करना
+    const fileName = `reel_${Date.now()}.jpg`;
+    const filePath = path.join(__dirname, fileName);
+    const imageStream = await fetch(data.thumbnail_url);
+    const buffer = await imageStream.arrayBuffer();
+    fs.writeFileSync(filePath, Buffer.from(buffer));
+
+    res.json({ success: true, fileUrl: `/download/${fileName}` });
+
+    // Auto delete after 1 minute
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch (err) {
+        console.warn("⚠ Cleanup failed:", err.message);
+      }
+    }, 60 * 1000);
+  } catch (err) {
+    console.error("💥 Download failed:", err);
+    res.status(500).json({ success: false, message: "Download failed" });
+  }
+});
+
+// File serve route
 app.get("/download/:fileName", (req, res) => {
   const file = path.join(__dirname, req.params.fileName);
   res.download(file);
 });
 
-// ==============================
-// ✅ Start Server
-// ==============================
-app.listen(PORT, () =>
-  console.log(`✅ Sharad Insta Pro running at http://localhost:${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`✅ Sharad Insta Pro running at http://localhost:${PORT}`);
+});
