@@ -1,51 +1,45 @@
 import { exec } from "child_process";
 import path from "path";
-import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export async function downloadReel(url) {
+// Identify Link Type
+function detectType(url) {
+  if (url.includes("/stories/")) return "story";
+  if (url.includes("/reel/")) return "reel";
+  if (url.includes("/p/")) return "post";
+  return "unknown";
+}
+
+export function downloadReel(reelUrl) {
   return new Promise((resolve, reject) => {
-    if (!url || !url.includes("instagram.com")) {
-      console.log("❌ Invalid link:", url);
-      return reject(new Error("Invalid Instagram URL"));
+    const type = detectType(reelUrl);
+    const timestamp = Date.now();
+    const filePath = path.join(__dirname, `ig-${timestamp}.mp4`);
+
+    // Different commands for story vs reel/post
+    let command = "";
+
+    if (type === "story") {
+      // Instagram Story Download
+      command = `yt-dlp --cookies cookies.txt --user-agent "Mozilla/5.0" -o "${filePath}" "${reelUrl}"`;
+    } else {
+      // Instagram Reel/Post Download
+      command = `yt-dlp --cookies cookies.txt -f best -o "${filePath}`" "${reelUrl}";
     }
 
-    const timestamp = Date.now();
-    const outputPath = path.join(__dirname, `reel-${timestamp}.mp4`);
-    const command = `yt-dlp --no-cache-dir -f best -o "${outputPath}" "${url}"`;
+    console.log("Running:", command);
 
-    console.log("▶ Running command:", command);
-
-    exec(command, { maxBuffer: 1024 * 1024 * 200 }, (error, stdout, stderr) => {
-      console.log("📥 yt-dlp stdout:", stdout);
+    exec(command, (error, stdout, stderr) => {
       if (error) {
-        console.error("❌ yt-dlp error:", stderr);
-        return reject(error);
+        console.error("yt-dlp error:", stderr);
+        return reject("Download failed");
       }
 
-      console.log("✅ Download complete:", outputPath);
-
-      // delete old files (older than 1 minute)
-      try {
-        const now = Date.now();
-        fs.readdirSync(__dirname)
-          .filter(f => f.startsWith("reel-") && f.endsWith(".mp4"))
-          .forEach(f => {
-            const file = path.join(__dirname, f);
-            const stat = fs.statSync(file);
-            if (now - stat.mtimeMs > 60 * 1000) {
-              fs.unlinkSync(file);
-              console.log("🗑 Deleted old file:", f);
-            }
-          });
-      } catch (e) {
-        console.warn("⚠ Cleanup warning:", e.message);
-      }
-
-      resolve(outputPath);
+      console.log("Download complete:", filePath);
+      resolve(filePath);
     });
   });
 }
